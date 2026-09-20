@@ -1,0 +1,73 @@
+Restore the published ExORL Walker flip task expected by RLDP's benchmark.
+Base: facebookresearch/offline_rl a53d64f5579e50ed6b93dff40e0bb6d1aea3b691
+Source: https://github.com/denisyarats/exorl/blob/9cb4334fe730fd562ddccc5943d5d04884bf6350/custom_dmc_tasks/walker.py
+Source license: Apache-2.0 (retained in walker.py).
+
+The factory and flip reward are copied from ExORL. The flip flag is appended
+so existing offline_rl positional arguments and spin behavior are preserved.
+Angular momentum threshold/margin: 5; reward includes the standing factor.
+The constructor's move_speed=8 is unused by the flip reward branch.
+RLDP names ExORL but does not publish its original dmc_tasks dependency pin.
+No published offline_rl commit defines flip; downgrading cannot restore it.
+
+Apply from the project root after git submodule update --init --recursive:
+  git -C third_party/offline_rl apply ../../scripts/walker-flip.patch
+
+diff --git a/src/dmc_tasks/walker.py b/src/dmc_tasks/walker.py
+index 7c3e2d2..f0b8665 100644
+--- a/src/dmc_tasks/walker.py
++++ b/src/dmc_tasks/walker.py
+@@ -105,6 +105,21 @@ def create_locomotion(task:str, time_limit: int = _DEFAULT_TIME_LIMIT,
+                                control_timestep=_CONTROL_TIMESTEP,
+                                **environment_kwargs)
+ 
++# ExORL flip, copied from denisyarats/exorl commit
++# 9cb4334fe730fd562ddccc5943d5d04884bf6350, custom_dmc_tasks/walker.py.
++@SUITE.add('benchmarking')
++def flip(time_limit=_DEFAULT_TIME_LIMIT, random=None, environment_kwargs=None):
++    """Returns the Run task."""
++    physics = Physics.from_xml_string(*get_model_and_assets())
++    task = PlanarWalker(move_speed=_RUN_SPEED, flip=True, random=random)
++    environment_kwargs = environment_kwargs or {}
++    return control.Environment(physics,
++                               task,
++                               time_limit=time_limit,
++                               control_timestep=_CONTROL_TIMESTEP,
++                               **environment_kwargs)
++
++
+ @SUITE.add('benchmarking')
+ def spin(time_limit: int = _DEFAULT_TIME_LIMIT,
+          random=None,
+@@ -159,7 +174,7 @@ class Physics(mujoco.Physics):
+ class PlanarWalker(base.Task):
+     """A planar walker task."""
+ 
+-    def __init__(self, move_speed, forward=True, spin=False, random=None) -> None:
++    def __init__(self, move_speed, forward=True, spin=False, random=None, flip=False) -> None:
+         """Initializes an instance of `PlanarWalker`.
+ 
+     Args:
+@@ -173,6 +188,7 @@ class PlanarWalker(base.Task):
+         self._move_speed = move_speed
+         self._forward = 1 if forward else -1
+         self._spin = spin
++        self._flip = flip
+         super(PlanarWalker, self).__init__(random=random)
+ 
+     def initialize_episode(self, physics) -> None:
+@@ -202,6 +218,14 @@ class PlanarWalker(base.Task):
+                                      margin=_STAND_HEIGHT / 2)
+         upright = (1 + physics.torso_upright()) / 2
+         stand_reward = (3 * standing + upright) / 4
++        if self._flip:
++            move_reward = rewards.tolerance(physics.angmomentum(),
++                                            bounds=(_SPIN_SPEED, float('inf')),
++                                            margin=_SPIN_SPEED,
++                                            value_at_margin=0,
++                                            sigmoid='linear')
++            return stand_reward * (5 * move_reward + 1) / 6
++
+         if self._spin:
+             spin_reward = rewards.tolerance(self._forward *
+                                             physics.angmomentum(),
