@@ -395,11 +395,19 @@ def main():
             % args.save_every
             == 0
         ):
+            checkpoint_dir = (
+                output
+                / "checkpoints"
+                / f"step_{step + 1:07d}"
+            )
+
+            checkpoint_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
             agent.save(
-                str(
-                    output
-                    / "checkpoint"
-                )
+                str(checkpoint_dir)
             )
 
     agent.save(
