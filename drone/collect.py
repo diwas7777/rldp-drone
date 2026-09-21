@@ -34,6 +34,9 @@ HOLD_STEPS = 40
 # If a waypoint is not reached within this time, move on.
 MAX_APPROACH_STEPS = 300
 
+PHASE_APPROACH = 0
+PHASE_HOLD = 1
+
 
 def clip_norm(
     vector: np.ndarray,
@@ -85,12 +88,11 @@ def position_action(
     noise: np.ndarray | None = None,
 ) -> np.ndarray:
     """
-    Convert position error into the normalized high-level action expected
-    by CrazyflieEnv:
+    Convert position error into the normalized high-level action:
 
         [vx, vy, vz, yaw_rate] in [-1, 1]
 
-    CrazyflieEnv maps these to approximately:
+    CrazyflieEnv maps these approximately to:
 
         vx       -> [-2, 2] m/s
         vy       -> [-2, 2] m/s
@@ -99,12 +101,9 @@ def position_action(
     """
 
     position = obs[:3]
-
     error = waypoint - position
 
-    desired_velocity = (
-        kp * error
-    )
+    desired_velocity = kp * error
 
     desired_velocity[:2] = clip_norm(
         desired_velocity[:2],
@@ -121,16 +120,14 @@ def position_action(
         [
             desired_velocity[0] / 2.0,
             desired_velocity[1] / 2.0,
-            desired_velocity[2] / 1.0,
+            desired_velocity[2],
             0.0,
         ],
         dtype=np.float32,
     )
 
     if noise is not None:
-        action += noise.astype(
-            np.float32
-        )
+        action += noise.astype(np.float32)
 
     return np.clip(
         action,
@@ -147,15 +144,14 @@ def collect_episode(
     z_min: float,
     z_max: float,
 ) -> dict[str, np.ndarray]:
-
     ts = env.reset()
 
     observations = [
         ts.observation.copy()
     ]
 
-    # Match the ExoRL convention used by the RLDP loader:
-    # action[0] is a dummy action.
+    # ExoRL convention used by the RLDP loader:
+    # action[0] is unused/dummy.
     actions = [
         np.zeros(
             4,
@@ -190,6 +186,14 @@ def collect_episode(
         4,
         dtype=np.float32,
     )
+
+    waypoints = [
+        waypoint.copy()
+    ]
+
+    phases = [
+        PHASE_APPROACH
+    ]
 
     for _ in range(
         env.episode_steps
@@ -232,16 +236,26 @@ def collect_episode(
 
                 noise[:] = 0.0
 
+        # Make the metadata for the current state match the phase and
+        # waypoint actually used to choose the next action.
+        waypoints[-1] = waypoint.copy()
+
+        phases[-1] = (
+            PHASE_HOLD
+            if phase == "hold"
+            else PHASE_APPROACH
+        )
+
         # -------------------------------------------------------------
         # Action
         # -------------------------------------------------------------
 
         if phase == "hold":
-            # No exploration noise while holding.
+            # No exploration noise during the hold phase.
             #
-            # We still use a small position controller instead of
-            # commanding exactly zero velocity. That lets the drone
-            # correct drift while remaining slow near the waypoint.
+            # Small position corrections keep the drone close to the
+            # waypoint while allowing low-speed states to enter the
+            # offline dataset.
             action = position_action(
                 ts.observation,
                 waypoint,
@@ -314,7 +328,7 @@ def collect_episode(
         )
 
         # -------------------------------------------------------------
-        # Finished holding: choose another waypoint.
+        # Finished holding: select the next waypoint.
         # -------------------------------------------------------------
 
         if (
@@ -335,6 +349,19 @@ def collect_episode(
 
             noise[:] = 0.0
 
+        # Metadata for the newly recorded state. If the phase changes
+        # at the beginning of the next control step, this entry will be
+        # updated before that action is selected.
+        waypoints.append(
+            waypoint.copy()
+        )
+
+        phases.append(
+            PHASE_HOLD
+            if phase == "hold"
+            else PHASE_APPROACH
+        )
+
     return {
         "observation": np.asarray(
             observations,
@@ -351,10 +378,19 @@ def collect_episode(
             discounts,
             dtype=np.float32,
         ),
+
+        "waypoint": np.asarray(
+            waypoints,
+            dtype=np.float32,
+        ),
+        "phase": np.asarray(
+            phases,
+            dtype=np.uint8,
+        ),
     }
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
