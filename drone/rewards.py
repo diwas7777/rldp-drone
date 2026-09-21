@@ -9,11 +9,11 @@ TASKS = {
         dtype=np.float32,
     ),
     "left": np.array(
-        [-1.5, 0.0, 1.0],
+        [-2.0, 0.0, 1.0],
         dtype=np.float32,
     ),
     "right": np.array(
-        [1.5, 0.0, 1.0],
+        [2.0, 0.0, 1.0],
         dtype=np.float32,
     ),
     "corner": np.array(
