@@ -34,15 +34,15 @@ class VelocityControllerConfig:
     max_yaw_rate: float = 1.5
 
     # Outer velocity loop.
-    kp_velocity_xy: float = 2.0
+    kp_velocity_xy: float = 1.0
     kp_velocity_z: float = 2.5
 
-    max_horizontal_acceleration: float = 4.0
+    max_horizontal_acceleration: float = 2.0
     max_vertical_acceleration: float = 4.0
 
     # Attitude controller in physical torque units.
-    kp_attitude: float = 2.5e-5
-    kd_attitude: float = 5.0e-6
+    kp_attitude: float = 8.0e-5
+    kd_attitude: float = 5.0e-5
 
     # Crazyflie Menagerie actuator gear magnitude.
     moment_scale: float = 1.0e-5
