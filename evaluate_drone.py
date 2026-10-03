@@ -25,7 +25,9 @@ def sample_offline_observations(
     """
     Uniformly sample next-state observations from the offline dataset.
 
-    All drone episodes contain 1000 transitions and 1001 observations.
+    Samples are drawn across all episodes, as the upstream replay
+    buffer does. All drone episodes contain 1000 transitions and
+    1001 observations.
     """
 
     root = Path(dataset_root) / "buffer"
@@ -39,52 +41,38 @@ def sample_offline_observations(
 
     rng = np.random.default_rng(seed)
 
-    samples: list[np.ndarray] = []
-    collected = 0
+    next_observations: list[np.ndarray] = []
 
-    while collected < num_samples:
-        file_index = int(
-            rng.integers(0, len(files))
-        )
-
-        with np.load(files[file_index]) as data:
+    for path in files:
+        with np.load(path) as data:
             observations = data["observation"]
 
             if observations.shape[0] != 1001:
                 raise ValueError(
-                    f"{files[file_index]} has "
+                    f"{path} has "
                     f"{observations.shape[0]} observations; "
                     "expected 1001"
                 )
 
-            remaining = num_samples - collected
-
-            n = min(
-                remaining,
-                observations.shape[0] - 1,
+            next_observations.append(
+                observations[1:].astype(
+                    np.float32,
+                    copy=False,
+                )
             )
 
-            indices = rng.integers(
-                1,
-                observations.shape[0],
-                size=n,
-            )
-
-            batch = observations[
-                indices
-            ].astype(
-                np.float32,
-                copy=False,
-            )
-
-            samples.append(batch)
-
-            collected += n
-
-    return np.concatenate(
-        samples,
+    pool = np.concatenate(
+        next_observations,
         axis=0,
-    )[:num_samples]
+    )
+
+    indices = rng.integers(
+        0,
+        pool.shape[0],
+        size=num_samples,
+    )
+
+    return pool[indices]
 
 
 @torch.no_grad()
