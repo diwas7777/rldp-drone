@@ -287,7 +287,7 @@ def evaluate_episode(
                 time_to_goal = (
                     step
                     - success_hold_steps
-                    + 1
+                    + 2
                 ) * env.control_timestep
 
             step += 1

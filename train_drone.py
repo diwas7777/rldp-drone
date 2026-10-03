@@ -44,11 +44,9 @@ def load_dataset(
     storage = {
         "observation": [],
         "action": [],
-        "physics": [],
         "next": {
             "observation": [],
             "terminated": [],
-            "physics": [],
         },
     }
 
@@ -97,20 +95,6 @@ def load_dataset(
             ).reshape(-1, 1)
         )
 
-        storage[
-            "physics"
-        ].append(
-            data["physics"][:-1]
-        )
-
-        storage[
-            "next"
-        ][
-            "physics"
-        ].append(
-            data["physics"][1:]
-        )
-
     storage[
         "observation"
     ] = np.concatenate(
@@ -121,12 +105,6 @@ def load_dataset(
         "action"
     ] = np.concatenate(
         storage["action"]
-    )
-
-    storage[
-        "physics"
-    ] = np.concatenate(
-        storage["physics"]
     )
 
     for key in storage["next"]:

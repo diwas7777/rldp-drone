@@ -33,6 +33,9 @@ class VelocityControllerConfig:
     max_vz: float = 1.0
     max_yaw_rate: float = 1.5
 
+    # Largest lead of the yaw setpoint over the measured yaw.
+    max_yaw_error: float = 0.25
+
     # Outer velocity loop.
     kp_velocity_xy: float = 1.0
     kp_velocity_z: float = 2.5
@@ -187,9 +190,27 @@ class VelocityController:
         # Desired yaw
         # ---------------------------------------
 
+        rotation = quat_to_matrix(
+            quaternion
+        )
+
         self.desired_yaw = wrap_angle(
             self.desired_yaw
             + desired_yaw_rate * dt
+        )
+
+        # The moment actuator saturates, so keep the setpoint
+        # close to the measured yaw instead of letting it wind up.
+        yaw = yaw_from_matrix(rotation)
+
+        yaw_error = np.clip(
+            wrap_angle(self.desired_yaw - yaw),
+            -cfg.max_yaw_error,
+            cfg.max_yaw_error,
+        )
+
+        self.desired_yaw = wrap_angle(
+            yaw + yaw_error
         )
 
         heading = np.array(
@@ -230,12 +251,8 @@ class VelocityController:
         )
 
         # ---------------------------------------
-        # Current attitude
+        # Attitude error
         # ---------------------------------------
-
-        rotation = quat_to_matrix(
-            quaternion
-        )
 
         # Geometric SO(3) attitude error.
         error_matrix = (
